@@ -1,0 +1,124 @@
+"""Telegram bot listener for `/niche <adamId> [country_iso]` commands.
+
+Run as a long-lived process:
+    python -m bot.listener
+"""
+from __future__ import annotations
+import asyncio
+import sys
+from datetime import datetime
+from pathlib import Path
+
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
+
+from config import TELEGRAM_BOT_TOKEN
+
+
+DEFAULT_USER_ID = "1789c9b1-73e7-4653-a6b7-01470694e825"
+DEFAULT_COUNTRY_ISO = "RO"
+
+
+HELP_TEXT = (
+    "ASO Niche Finder bot\n\n"
+    "Commands:\n"
+    "  /niche <adamId> [country_iso] — run niche analysis (e.g. /niche 1234567890 RO)\n"
+    "  /start — show this help message\n"
+)
+
+
+def run_pipeline_and_send(adam_id: str, country_iso: str, chat_id: int) -> None:
+    """Synchronous pipeline: load seeds → find competitors → validate → scrape → score → export → send."""
+    from core.seed_loader import load_seeds
+    from core.country_map import to_upup_country
+    from core.competitor_finder import find_competitors
+    from core.niche_validator import filter_by_jaccard
+    from core.keyword_scraper import get_keywords
+    from core.scorer import aggregate_keywords, classify
+    from core.exporter import to_excel
+    from bot.telegram_sender import send_document
+
+    seeds = load_seeds(adam_id, DEFAULT_USER_ID, country_iso)
+    upup_country = to_upup_country(country_iso)
+
+    candidates = find_competitors(seeds, country=upup_country)
+
+    validated = filter_by_jaccard(candidates)[:8]
+    for c in validated:
+        c.validated = True
+
+    for comp in validated:
+        comp.keywords = get_keywords(comp.app_id, country=upup_country)
+
+    scored = aggregate_keywords(validated)
+    classified = classify(scored)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_name = f"niche_{adam_id}_{country_iso}_{timestamp}.xlsx"
+    output_path = to_excel(classified, validated, Path("output") / out_name)
+
+    caption = (
+        f"ASO niche report\n"
+        f"adamId: {adam_id}  Country: {country_iso}\n"
+        f"BEST: {len(classified['BEST'])}  "
+        f"MEDIUM: {len(classified['MEDIUM'])}  "
+        f"TRASH: {len(classified['TRASH'])}"
+    )
+    send_document(output_path, caption=caption)
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(HELP_TEXT)
+
+
+async def niche(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    args = context.args or []
+
+    if not args:
+        await update.message.reply_text(
+            "Usage: /niche <adamId> [country_iso]\nExample: /niche 1234567890 RO"
+        )
+        return
+
+    adam_id = args[0]
+    if not adam_id.isdigit():
+        await update.message.reply_text(
+            f"Invalid adamId {adam_id!r} — must be all digits.\n"
+            "Usage: /niche <adamId> [country_iso]"
+        )
+        return
+
+    country_iso = (args[1] if len(args) >= 2 else DEFAULT_COUNTRY_ISO).upper()
+    chat_id = update.effective_chat.id
+
+    await update.message.reply_text(
+        f"⏳ Running niche analysis for adamId={adam_id} country={country_iso}... "
+        f"this can take 3-5 minutes."
+    )
+
+    try:
+        # asyncio.to_thread keeps the bot event loop responsive while the
+        # blocking Playwright/HTTP pipeline runs.
+        await asyncio.to_thread(run_pipeline_and_send, adam_id, country_iso, chat_id)
+    except Exception as exc:
+        await context.bot.send_message(chat_id=chat_id, text=f"❌ Pipeline failed: {exc}")
+        return
+
+    await context.bot.send_message(chat_id=chat_id, text="✅ Done. Report sent above.")
+
+
+def main() -> None:
+    if not TELEGRAM_BOT_TOKEN:
+        print("ERROR: TELEGRAM_BOT_TOKEN is not set in .env — cannot start listener.", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Telegram listener starting on token {TELEGRAM_BOT_TOKEN[:10]}...")
+
+    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("niche", niche))
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
