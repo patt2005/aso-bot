@@ -21,6 +21,7 @@ from config import CACHE_DB_PATH
 from core.pipeline import run_pipeline, default_output_path, DEFAULT_USER_ID
 from core.seed_loader import load_seeds_by_country
 from core.app_lookup import get_app_name
+from core.auth_check import verify_upup_auth
 from bot.telegram_sender import send_document, send_message
 
 
@@ -98,8 +99,37 @@ def process_geo(adam_id: str, user_id: str, country_iso: str) -> None:
     mark_geo_seen(adam_id, country_iso)
 
 
+UPUP_LOGIN_EMAIL = "ozunmihai5@gmail.com"
+
+
 def main():
     print(f"=== {datetime.datetime.now().isoformat()} — daily multi-geo scan ===")
+
+    print("Checking upup auth...")
+    if not verify_upup_auth():
+        print("  ❌ upup session expired — sending Telegram alert and aborting.")
+        try:
+            send_message(
+                "🚨 upup authentication EXPIRED\n"
+                "\n"
+                "Daily ASO scan cannot run — login on upup.com has died.\n"
+                "\n"
+                f"Re-login needed with: {UPUP_LOGIN_EMAIL}\n"
+                "\n"
+                "Steps:\n"
+                "1. cd aso-niche-finder (locally)\n"
+                "2. rm cache/auth_state.json\n"
+                "3. python3 tools/inspect_upup.py\n"
+                "4. login in the browser, close it\n"
+                "5. upload the new cache/auth_state.json to the Railway volume\n"
+                "\n"
+                "Once re-uploaded, the next cron run will resume normally."
+            )
+        except Exception as exc:
+            print(f"  failed to send Telegram alert: {exc}")
+        sys.exit(1)
+    print("  ✓ upup auth is valid")
+
     for app in APPS:
         adam_id = app["adam_id"]
         user_id = app["user_id"]
