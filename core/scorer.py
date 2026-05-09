@@ -24,6 +24,8 @@ def aggregate_keywords(
         "popularities": [],
         "rankings": [],
         "competitors": [],
+        "total_apps": [],
+        "ad_counts": [],
     })
 
     for comp in competitors:
@@ -37,6 +39,10 @@ def aggregate_keywords(
                 entry["popularities"].append(kw.popularity)
             if kw.ranking is not None:
                 entry["rankings"].append(kw.ranking)
+            if kw.total_apps is not None:
+                entry["total_apps"].append(kw.total_apps)
+            if kw.ad_count is not None:
+                entry["ad_counts"].append(kw.ad_count)
             entry["competitors"].append(comp.app_id)
 
     scored: list[ScoredKeyword] = []
@@ -45,6 +51,8 @@ def aggregate_keywords(
         rank_avg = sum(data["rankings"]) / len(data["rankings"]) if data["rankings"] else 100
         count = len(set(data["competitors"]))
         score = pop_avg * math.sqrt(count) / (rank_avg + 1)
+        total_apps = max(data["total_apps"]) if data["total_apps"] else None
+        ad_count = max(data["ad_counts"]) if data["ad_counts"] else None
         scored.append(ScoredKeyword(
             name=name,
             popularity=round(pop_avg, 1),
@@ -52,6 +60,8 @@ def aggregate_keywords(
             competitor_count=count,
             competitors=sorted(set(data["competitors"])),
             score=round(score, 3),
+            total_apps=total_apps,
+            ad_count=ad_count,
         ))
 
     scored.sort(key=lambda s: s.score, reverse=True)

@@ -60,11 +60,12 @@ def main():
                 if "application/json" not in ctype:
                     return
                 body = resp.text()
+                preview_size = 12000 if "api.upup.com" in resp.url else 800
                 entry = {
                     "url": resp.url,
                     "method": resp.request.method,
                     "status": resp.status,
-                    "body_preview": body[:800],
+                    "body_preview": body[:preview_size],
                     "body_length": len(body),
                 }
                 captures.append(entry)

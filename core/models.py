@@ -9,6 +9,8 @@ class Keyword:
     ranking: Optional[int] = None
     change: Optional[int] = None
     popularity: Optional[float] = None
+    total_apps: Optional[int] = None
+    ad_count: Optional[int] = None
 
     def __str__(self) -> str:
         parts = [self.name]
@@ -39,3 +41,7 @@ class ScoredKeyword:
     competitors: list[str] = field(default_factory=list)
     score: float = 0.0
     tier: str = "TRASH"
+    total_apps: Optional[int] = None
+    ad_count: Optional[int] = None
+    bidder_ids: list[str] = field(default_factory=list)
+    source: str = "ASO"

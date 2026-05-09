@@ -31,7 +31,7 @@ def _fetch_raw(adam_id: str | int, user_id: str) -> list[dict]:
     resp = httpx.get(
         SEED_KEYWORDS_ENDPOINT,
         params={"adamId": str(adam_id), "userId": user_id},
-        timeout=30.0,
+        timeout=120.0,
     )
     resp.raise_for_status()
     payload = resp.json()

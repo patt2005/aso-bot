@@ -28,69 +28,21 @@ HELP_TEXT = (
 
 
 def run_pipeline_and_send(adam_id: str, country_iso: str, chat_id: int) -> None:
-    """Synchronous pipeline: load seeds → find competitors → validate → scrape → score → DEDUP → export → send.
-
-    Dedup keeps only NEW keywords: not already in seeds (already targeted) and
-    not previously sent (history table). After sending, BEST+MEDIUM are
-    recorded so they're excluded next run.
-    """
-    from core.seed_loader import load_seeds
-    from core.country_map import to_upup_country
-    from core.competitor_finder import find_competitors
-    from core.niche_validator import filter_by_jaccard
-    from core.keyword_scraper import get_keywords
-    from core.scorer import aggregate_keywords, classify
-    from core.dedup import exclude_seeds, exclude_history, record_history
-    from core.exporter import to_excel
+    from core.pipeline import run_pipeline, default_output_path
     from core.app_lookup import get_app_name
     from bot.telegram_sender import send_document
 
-    seeds = load_seeds(adam_id, DEFAULT_USER_ID, country_iso)
-    upup_country = to_upup_country(country_iso)
-
-    candidates = find_competitors(seeds, country=upup_country)
-
-    validated = filter_by_jaccard(candidates)[:8]
-    for c in validated:
-        c.validated = True
-
-    for comp in validated:
-        comp.keywords = get_keywords(comp.app_id, country=upup_country)
-
-    scored = aggregate_keywords(validated, allowed_languages=["EN", country_iso])
-    total_before = len(scored)
-    scored = exclude_seeds(scored, seeds)
-    after_seeds = len(scored)
-    scored = exclude_history(scored, adam_id, country_iso)
-    after_history = len(scored)
-
-    classified = classify(scored)
-    record_history(classified["BEST"] + classified["MEDIUM"], adam_id, country_iso)
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_name = f"niche_{adam_id}_{country_iso}_{timestamp}.xlsx"
-    output_path = to_excel(classified, validated, Path("output") / out_name)
+    output_path = default_output_path(adam_id, country_iso)
+    stats = run_pipeline(adam_id, country_iso, output_path, user_id=DEFAULT_USER_ID)
 
     app_name = get_app_name(adam_id, country=country_iso)
-    excluded_seeds_count = total_before - after_seeds
-    excluded_history_count = after_seeds - after_history
-
     caption = (
         f"🎯 ASO Niche Report\n"
         f"\n"
         f"📱 App: {app_name}\n"
         f"🌍 Country: {country_iso}\n"
         f"\n"
-        f"🆕 New keywords discovered: {after_history}\n"
-        f"   🏆 BEST — must target: {len(classified['BEST'])}\n"
-        f"   ⭐ MEDIUM — worth testing: {len(classified['MEDIUM'])}\n"
-        f"   ⚪ Low value: {len(classified['TRASH'])}\n"
-        f"\n"
-        f"ℹ️ Filtered out:\n"
-        f"   • {excluded_seeds_count} already in your campaigns\n"
-        f"   • {excluded_history_count} previously sent\n"
-        f"\n"
-        f"📎 Full details in attached Excel"
+        f"🆕 New keywords discovered: {stats['new_keywords']}"
     )
     send_document(output_path, caption=caption)
 

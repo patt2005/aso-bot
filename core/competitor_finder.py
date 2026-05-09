@@ -101,16 +101,22 @@ def find_competitors(
         except PWTimeoutError:
             pass
         page.wait_for_timeout(3000)
-        print(f"  [debug] page url after load: {page.url}")
-        print(f"  [debug] page title: {page.title()}")
 
-        for seed in seed_keywords:
+        for i, seed in enumerate(seed_keywords, 1):
             current_seed["value"] = seed
             try:
                 _trigger_search(page, seed, country, market)
                 page.wait_for_timeout(2500)
             except Exception as exc:
                 print(f"  ! search failed for {seed!r}: {exc}")
+            if i % 8 == 0 and i < len(seed_keywords):
+                try:
+                    page.goto(HOME_URL, wait_until="domcontentloaded")
+                    page.wait_for_timeout(2000)
+                except Exception:
+                    pass
+            if i % 5 == 0:
+                print(f"  [{i}/{len(seed_keywords)}] searched, {len(overlap)} unique apps so far")
 
         browser.close()
 

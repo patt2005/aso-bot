@@ -80,6 +80,8 @@ def _scrape_keywords(app_id: str, country: int, market: int) -> list[Keyword]:
                         ranking=item[1],
                         change=item[2],
                         popularity=item[7],
+                        total_apps=item[3] if len(item) > 3 else None,
+                        ad_count=item[4] if len(item) > 4 else None,
                     )
                     if kw.popularity is not None and kw.popularity >= MIN_POPULARITY:
                         keywords.append(kw)
