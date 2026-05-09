@@ -16,7 +16,7 @@ from core.competitor_finder import find_competitors
 from core.niche_validator import filter_by_jaccard
 from core.keyword_scraper import get_keywords
 from core.scorer import aggregate_keywords, classify
-from core.dedup import exclude_seeds, exclude_history, record_history
+from core.dedup import exclude_seeds
 from core.bidding_scraper import fetch_bidding_data
 from core.snowball import find_relevant_bidders
 from core.exporter import to_excel
@@ -71,9 +71,7 @@ def run_pipeline(
     total_before = len(scored)
     scored = exclude_seeds(scored, all_seeds)
     after_seeds = len(scored)
-    scored = exclude_history(scored, adam_id, country_iso)
-    after_history = len(scored)
-    log(f"  {total_before} → {after_seeds} (excl. seeds) → {after_history} (excl. history)")
+    log(f"  {total_before} → {after_seeds} (excl. seeds)")
 
     classified = classify(scored)
     log(f"  BEST {len(classified['BEST'])}, MEDIUM {len(classified['MEDIUM'])}, LOW {len(classified['TRASH'])}")
@@ -109,9 +107,7 @@ def run_pipeline(
         total_before = len(scored2)
         scored2 = exclude_seeds(scored2, all_seeds)
         after_seeds = len(scored2)
-        scored2 = exclude_history(scored2, adam_id, country_iso)
-        after_history = len(scored2)
-        log(f"  {total_before} → {after_seeds} (excl. seeds) → {after_history} (excl. history)")
+        log(f"  {total_before} → {after_seeds} (excl. seeds)")
 
         for kw in scored2:
             info = bidding_map.get(kw.name.lower().strip()) or {}
@@ -126,9 +122,6 @@ def run_pipeline(
         validated = validated_all
         log(f"  BEST {len(classified['BEST'])}, MEDIUM {len(classified['MEDIUM'])}, LOW {len(classified['TRASH'])}")
 
-    if record:
-        record_history(classified["BEST"] + classified["MEDIUM"], adam_id, country_iso)
-
     output_path = Path(output_path)
     to_excel(classified, validated, output_path, country=upup_country)
     log(f"Saved {output_path}")
@@ -137,8 +130,7 @@ def run_pipeline(
         "output_path": output_path,
         "total_before": total_before,
         "excluded_seeds": total_before - after_seeds,
-        "excluded_history": after_seeds - after_history,
-        "new_keywords": after_history,
+        "new_keywords": after_seeds,
         "best": len(classified["BEST"]),
         "medium": len(classified["MEDIUM"]),
         "low": len(classified["TRASH"]),
