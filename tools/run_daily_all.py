@@ -17,12 +17,37 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from config import CACHE_DB_PATH
+import base64
+import os
+
+from config import CACHE_DB_PATH, UPUP_AUTH_STATE
 from core.pipeline import run_pipeline, default_output_path, DEFAULT_USER_ID
 from core.seed_loader import load_seeds_by_country
 from core.app_lookup import get_app_name
 from core.auth_check import verify_upup_auth
 from bot.telegram_sender import send_document, send_message
+
+
+def hydrate_auth_state_from_env():
+    """If UPUP_AUTH_STATE_BASE64 env var is set, decode it to the auth file.
+
+    Avoids needing Railway CLI uploads. Set via Railway dashboard once after
+    a fresh local login: `base64 -i cache/auth_state.json | pbcopy`.
+    """
+    encoded = os.getenv("UPUP_AUTH_STATE_BASE64")
+    if not encoded:
+        return
+    try:
+        decoded = base64.b64decode(encoded).decode("utf-8")
+    except Exception as exc:
+        print(f"  failed to decode UPUP_AUTH_STATE_BASE64: {exc}")
+        return
+    target = Path(UPUP_AUTH_STATE)
+    if target.exists() and target.read_text(encoding="utf-8") == decoded:
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(decoded, encoding="utf-8")
+    print(f"  wrote auth state from env var -> {target}")
 
 
 APPS = [
@@ -104,6 +129,8 @@ UPUP_LOGIN_EMAIL = "ozunmihai5@gmail.com"
 
 def main():
     print(f"=== {datetime.datetime.now().isoformat()} — daily multi-geo scan ===")
+
+    hydrate_auth_state_from_env()
 
     print("Checking upup auth...")
     if not verify_upup_auth():
