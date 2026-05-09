@@ -42,6 +42,7 @@ def run_pipeline_and_send(adam_id: str, country_iso: str, chat_id: int) -> None:
     from core.scorer import aggregate_keywords, classify
     from core.dedup import exclude_seeds, exclude_history, record_history
     from core.exporter import to_excel
+    from core.app_lookup import get_app_name
     from bot.telegram_sender import send_document
 
     seeds = load_seeds(adam_id, DEFAULT_USER_ID, country_iso)
@@ -70,17 +71,26 @@ def run_pipeline_and_send(adam_id: str, country_iso: str, chat_id: int) -> None:
     out_name = f"niche_{adam_id}_{country_iso}_{timestamp}.xlsx"
     output_path = to_excel(classified, validated, Path("output") / out_name)
 
-    app_store_url = f"https://apps.apple.com/app/id{adam_id}"
+    app_name = get_app_name(adam_id, country=country_iso)
+    excluded_seeds_count = total_before - after_seeds
+    excluded_history_count = after_seeds - after_history
+
     caption = (
-        f"📱 App ID: {adam_id}\n"
-        f"🔗 {app_store_url}\n"
+        f"🎯 ASO Niche Report\n"
+        f"\n"
+        f"📱 App: {app_name}\n"
         f"🌍 Country: {country_iso}\n"
         f"\n"
-        f"ASO niche report — NEW keywords only\n"
-        f"Filtered: {total_before} → {after_seeds} (excl. seeds) → {after_history} (excl. history)\n"
-        f"BEST: {len(classified['BEST'])}  "
-        f"MEDIUM: {len(classified['MEDIUM'])}  "
-        f"TRASH: {len(classified['TRASH'])}"
+        f"🆕 New keywords discovered: {after_history}\n"
+        f"   🏆 BEST — must target: {len(classified['BEST'])}\n"
+        f"   ⭐ MEDIUM — worth testing: {len(classified['MEDIUM'])}\n"
+        f"   ⚪ Low value: {len(classified['TRASH'])}\n"
+        f"\n"
+        f"ℹ️ Filtered out:\n"
+        f"   • {excluded_seeds_count} already in your campaigns\n"
+        f"   • {excluded_history_count} previously sent\n"
+        f"\n"
+        f"📎 Full details in attached Excel"
     )
     send_document(output_path, caption=caption)
 
