@@ -26,6 +26,7 @@ from core.models import Competitor, ScoredKeyword
 DEFAULT_USER_ID = "1789c9b1-73e7-4653-a6b7-01470694e825"
 TOP_COMPETITORS = 15
 SEEDS_FOR_SEARCH = 31
+MAX_KEYWORDS_OUT = 200
 
 
 def run_pipeline(
@@ -122,6 +123,11 @@ def run_pipeline(
         validated = validated_all
         log(f"  BEST {len(classified['BEST'])}, MEDIUM {len(classified['MEDIUM'])}, LOW {len(classified['TRASH'])}")
 
+    if len(scored) > MAX_KEYWORDS_OUT:
+        log(f"Capping output to top {MAX_KEYWORDS_OUT} by score (had {len(scored)})")
+        scored = sorted(scored, key=lambda k: k.score, reverse=True)[:MAX_KEYWORDS_OUT]
+        classified = classify(scored)
+
     output_path = Path(output_path)
     to_excel(classified, validated, output_path, country=upup_country)
     log(f"Saved {output_path}")
@@ -130,7 +136,7 @@ def run_pipeline(
         "output_path": output_path,
         "total_before": total_before,
         "excluded_seeds": total_before - after_seeds,
-        "new_keywords": after_seeds,
+        "new_keywords": len(scored),
         "best": len(classified["BEST"]),
         "medium": len(classified["MEDIUM"]),
         "low": len(classified["TRASH"]),
