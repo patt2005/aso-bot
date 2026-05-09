@@ -54,8 +54,6 @@ APPS = [
     {"adam_id": "6746982805", "user_id": DEFAULT_USER_ID},
 ]
 
-PRIORITY_COUNTRIES = {"RO", "FR", "DE", "IT", "PL", "CZ", "HU"}
-
 
 def process_geo(adam_id: str, user_id: str, country_iso: str) -> None:
     app_name = get_app_name(adam_id, country=country_iso)
@@ -126,17 +124,13 @@ def main():
 
         from core.country_map import ISO_TO_UPUP
         active_countries = sorted(grouped.keys())
-        filtered = sorted(set(active_countries) & PRIORITY_COUNTRIES)
-        skipped_no_id = [c for c in filtered if c not in ISO_TO_UPUP]
-        runnable = [c for c in filtered if c in ISO_TO_UPUP]
-        ignored = sorted(set(active_countries) - PRIORITY_COUNTRIES)
+        runnable = [c for c in active_countries if c in ISO_TO_UPUP]
+        skipped = [c for c in active_countries if c not in ISO_TO_UPUP]
 
-        print(f"  {adam_id}: active={active_countries}")
-        print(f"    runnable (priority + has upup id): {runnable}")
-        if skipped_no_id:
-            print(f"    skipped (priority but no upup id yet): {skipped_no_id}")
-        if ignored:
-            print(f"    ignored (not in priority list): {ignored}")
+        print(f"  {adam_id}: active campaigns in {active_countries}")
+        print(f"    runnable: {runnable}")
+        if skipped:
+            print(f"    skipped (no upup id mapped): {skipped}")
 
         for country_iso in runnable:
             try:
