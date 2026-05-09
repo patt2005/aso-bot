@@ -108,7 +108,14 @@ def find_competitors(
                 _trigger_search(page, seed, country, market)
                 page.wait_for_timeout(2500)
             except Exception as exc:
-                print(f"  ! search failed for {seed!r}: {exc}")
+                print(f"  ! search failed for {seed!r}: {exc} — reloading home")
+                try:
+                    page.goto(HOME_URL, wait_until="domcontentloaded")
+                    page.wait_for_timeout(2500)
+                    _trigger_search(page, seed, country, market)
+                    page.wait_for_timeout(2500)
+                except Exception as exc2:
+                    print(f"  ! retry failed for {seed!r}: {exc2}")
             if i % 8 == 0 and i < len(seed_keywords):
                 try:
                     page.goto(HOME_URL, wait_until="domcontentloaded")

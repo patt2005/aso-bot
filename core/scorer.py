@@ -69,28 +69,27 @@ def aggregate_keywords(
 
 
 def classify(scored: list[ScoredKeyword]) -> dict[str, list[ScoredKeyword]]:
-    """Split scored keywords into BEST / MEDIUM / TRASH tiers."""
+    """Split scored keywords into BEST / MEDIUM / TRASH tiers.
+
+    Defensive numeric coercion — some cached keywords can come back with a
+    None / str field which would crash the comparisons here.
+    """
     best, medium, trash = [], [], []
 
     for kw in scored:
-        if kw.competitor_count == 1 and kw.popularity < 15:
+        pop = _to_float(kw.popularity)
+        rank = _to_float(kw.avg_competitor_ranking, default=100.0)
+        count = int(kw.competitor_count or 0)
+
+        if count == 1 and pop < 15:
             kw.tier = "TRASH"
             trash.append(kw)
             continue
 
-        if (
-            kw.popularity >= 30
-            and kw.competitor_count >= 3
-            and kw.avg_competitor_ranking <= 15
-        ):
+        if pop >= 30 and count >= 3 and rank <= 15:
             kw.tier = "BEST"
             best.append(kw)
-        elif (
-            kw.popularity >= 15
-            and kw.competitor_count >= 2
-        ) or (
-            kw.popularity >= 25 and kw.avg_competitor_ranking <= 30
-        ):
+        elif (pop >= 15 and count >= 2) or (pop >= 25 and rank <= 30):
             kw.tier = "MEDIUM"
             medium.append(kw)
         else:
@@ -98,3 +97,12 @@ def classify(scored: list[ScoredKeyword]) -> dict[str, list[ScoredKeyword]]:
             trash.append(kw)
 
     return {"BEST": best, "MEDIUM": medium, "TRASH": trash}
+
+
+def _to_float(value, default: float = 0.0) -> float:
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default

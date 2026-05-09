@@ -54,6 +54,8 @@ APPS = [
     {"adam_id": "6746982805", "user_id": DEFAULT_USER_ID},
 ]
 
+PRIORITY_COUNTRIES = {"RO", "FR", "DE", "IT", "PL", "CZ", "HU"}
+
 
 def process_geo(adam_id: str, user_id: str, country_iso: str) -> None:
     app_name = get_app_name(adam_id, country=country_iso)
@@ -122,10 +124,21 @@ def main():
                 pass
             continue
 
-        countries = sorted(grouped.keys())
-        print(f"  {adam_id}: {len(countries)} countries -> {countries}")
+        from core.country_map import ISO_TO_UPUP
+        active_countries = sorted(grouped.keys())
+        filtered = sorted(set(active_countries) & PRIORITY_COUNTRIES)
+        skipped_no_id = [c for c in filtered if c not in ISO_TO_UPUP]
+        runnable = [c for c in filtered if c in ISO_TO_UPUP]
+        ignored = sorted(set(active_countries) - PRIORITY_COUNTRIES)
 
-        for country_iso in countries:
+        print(f"  {adam_id}: active={active_countries}")
+        print(f"    runnable (priority + has upup id): {runnable}")
+        if skipped_no_id:
+            print(f"    skipped (priority but no upup id yet): {skipped_no_id}")
+        if ignored:
+            print(f"    ignored (not in priority list): {ignored}")
+
+        for country_iso in runnable:
             try:
                 process_geo(adam_id, user_id, country_iso)
             except Exception as exc:
