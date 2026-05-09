@@ -28,13 +28,19 @@ HELP_TEXT = (
 
 
 def run_pipeline_and_send(adam_id: str, country_iso: str, chat_id: int) -> None:
-    """Synchronous pipeline: load seeds → find competitors → validate → scrape → score → export → send."""
+    """Synchronous pipeline: load seeds → find competitors → validate → scrape → score → DEDUP → export → send.
+
+    Dedup keeps only NEW keywords: not already in seeds (already targeted) and
+    not previously sent (history table). After sending, BEST+MEDIUM are
+    recorded so they're excluded next run.
+    """
     from core.seed_loader import load_seeds
     from core.country_map import to_upup_country
     from core.competitor_finder import find_competitors
     from core.niche_validator import filter_by_jaccard
     from core.keyword_scraper import get_keywords
     from core.scorer import aggregate_keywords, classify
+    from core.dedup import exclude_seeds, exclude_history, record_history
     from core.exporter import to_excel
     from bot.telegram_sender import send_document
 
@@ -50,16 +56,24 @@ def run_pipeline_and_send(adam_id: str, country_iso: str, chat_id: int) -> None:
     for comp in validated:
         comp.keywords = get_keywords(comp.app_id, country=upup_country)
 
-    scored = aggregate_keywords(validated)
+    scored = aggregate_keywords(validated, allowed_languages=["EN", country_iso])
+    total_before = len(scored)
+    scored = exclude_seeds(scored, seeds)
+    after_seeds = len(scored)
+    scored = exclude_history(scored, adam_id, country_iso)
+    after_history = len(scored)
+
     classified = classify(scored)
+    record_history(classified["BEST"] + classified["MEDIUM"], adam_id, country_iso)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_name = f"niche_{adam_id}_{country_iso}_{timestamp}.xlsx"
     output_path = to_excel(classified, validated, Path("output") / out_name)
 
     caption = (
-        f"ASO niche report\n"
+        f"ASO niche report — NEW keywords only\n"
         f"adamId: {adam_id}  Country: {country_iso}\n"
+        f"Filtered: {total_before} → {after_seeds} (excl. seeds) → {after_history} (excl. history)\n"
         f"BEST: {len(classified['BEST'])}  "
         f"MEDIUM: {len(classified['MEDIUM'])}  "
         f"TRASH: {len(classified['TRASH'])}"
