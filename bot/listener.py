@@ -70,9 +70,13 @@ def run_pipeline_and_send(adam_id: str, country_iso: str, chat_id: int) -> None:
     out_name = f"niche_{adam_id}_{country_iso}_{timestamp}.xlsx"
     output_path = to_excel(classified, validated, Path("output") / out_name)
 
+    app_store_url = f"https://apps.apple.com/app/id{adam_id}"
     caption = (
+        f"📱 App ID: {adam_id}\n"
+        f"🔗 {app_store_url}\n"
+        f"🌍 Country: {country_iso}\n"
+        f"\n"
         f"ASO niche report — NEW keywords only\n"
-        f"adamId: {adam_id}  Country: {country_iso}\n"
         f"Filtered: {total_before} → {after_seeds} (excl. seeds) → {after_history} (excl. history)\n"
         f"BEST: {len(classified['BEST'])}  "
         f"MEDIUM: {len(classified['MEDIUM'])}  "
