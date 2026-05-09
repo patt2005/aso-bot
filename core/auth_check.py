@@ -28,12 +28,21 @@ def verify_upup_auth(timeout_ms: int = 15000) -> bool:
             page.set_default_navigation_timeout(timeout_ms)
             try:
                 page.goto("https://www.upup.com/", wait_until="domcontentloaded")
-                page.wait_for_timeout(3000)
             except PWTimeoutError:
                 return False
 
-            # Logged-in pages don't expose a password input. Login screen does.
-            login_present = page.query_selector('input[type="password"]')
+            # Wait for any redirect chain to settle (home -> login if expired).
+            try:
+                page.wait_for_load_state("networkidle", timeout=10000)
+            except PWTimeoutError:
+                pass
+            page.wait_for_timeout(2000)
+
+            try:
+                login_present = page.query_selector('input[type="password"]')
+            except Exception:
+                # Another navigation happened; treat as logged out to be safe.
+                return False
             return login_present is None
         finally:
             browser.close()
