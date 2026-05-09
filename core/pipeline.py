@@ -74,11 +74,15 @@ def run_pipeline(
     after_seeds = len(scored)
     log(f"  {total_before} → {after_seeds} (excl. seeds)")
 
+    if len(scored) > MAX_KEYWORDS_OUT:
+        log(f"  Capping to top {MAX_KEYWORDS_OUT} by score (had {len(scored)})")
+        scored = sorted(scored, key=lambda k: k.score, reverse=True)[:MAX_KEYWORDS_OUT]
+
     classified = classify(scored)
     log(f"  BEST {len(classified['BEST'])}, MEDIUM {len(classified['MEDIUM'])}, LOW {len(classified['TRASH'])}")
 
     log("Fetching real ASA bidder counts per keyword...")
-    keywords_for_bidding = [k.name for k in scored if k.popularity and k.popularity >= 15]
+    keywords_for_bidding = [k.name for k in scored]
     bidding_map = fetch_bidding_data(keywords_for_bidding, country=upup_country, log=log)
     for kw in scored:
         info = bidding_map.get(kw.name.lower().strip()) or {}
@@ -109,6 +113,10 @@ def run_pipeline(
         scored2 = exclude_seeds(scored2, all_seeds)
         after_seeds = len(scored2)
         log(f"  {total_before} → {after_seeds} (excl. seeds)")
+
+        if len(scored2) > MAX_KEYWORDS_OUT:
+            log(f"  Capping to top {MAX_KEYWORDS_OUT} by score (had {len(scored2)})")
+            scored2 = sorted(scored2, key=lambda k: k.score, reverse=True)[:MAX_KEYWORDS_OUT]
 
         for kw in scored2:
             info = bidding_map.get(kw.name.lower().strip()) or {}
