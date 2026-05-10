@@ -45,3 +45,4 @@ class ScoredKeyword:
     ad_count: Optional[int] = None
     bidder_ids: list[str] = field(default_factory=list)
     source: str = "ASO"
+    competitor_ranks: dict[str, int] = field(default_factory=dict)

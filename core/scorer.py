@@ -23,7 +23,7 @@ def aggregate_keywords(
     bucket: dict[str, dict] = defaultdict(lambda: {
         "popularities": [],
         "rankings": [],
-        "competitors": [],
+        "best_rank_per_comp": {},
         "total_apps": [],
         "ad_counts": [],
     })
@@ -43,13 +43,18 @@ def aggregate_keywords(
                 entry["total_apps"].append(kw.total_apps)
             if kw.ad_count is not None:
                 entry["ad_counts"].append(kw.ad_count)
-            entry["competitors"].append(comp.app_id)
+            rank = kw.ranking if kw.ranking is not None else 9999
+            prev = entry["best_rank_per_comp"].get(comp.app_id)
+            if prev is None or rank < prev:
+                entry["best_rank_per_comp"][comp.app_id] = rank
 
     scored: list[ScoredKeyword] = []
     for name, data in bucket.items():
         pop_avg = sum(data["popularities"]) / len(data["popularities"]) if data["popularities"] else 0
         rank_avg = sum(data["rankings"]) / len(data["rankings"]) if data["rankings"] else 100
-        count = len(set(data["competitors"]))
+        comps_by_rank = sorted(data["best_rank_per_comp"].items(), key=lambda x: x[1])
+        sorted_app_ids = [app_id for app_id, _ in comps_by_rank]
+        count = len(sorted_app_ids)
         score = pop_avg * math.sqrt(count) / (rank_avg + 1)
         total_apps = max(data["total_apps"]) if data["total_apps"] else None
         ad_count = max(data["ad_counts"]) if data["ad_counts"] else None
@@ -58,7 +63,8 @@ def aggregate_keywords(
             popularity=round(pop_avg, 1),
             avg_competitor_ranking=round(rank_avg, 1),
             competitor_count=count,
-            competitors=sorted(set(data["competitors"])),
+            competitors=sorted_app_ids,
+            competitor_ranks={aid: r for aid, r in comps_by_rank if r < 9999},
             score=round(score, 3),
             total_apps=total_apps,
             ad_count=ad_count,

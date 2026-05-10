@@ -102,8 +102,15 @@ def to_excel(
 
 
 def _scored_to_df(items: list[tuple[ScoredKeyword, str]], name_by_id: dict[str, str]) -> pd.DataFrame:
-    return pd.DataFrame([
-        {
+    rows = []
+    for k, tier in items:
+        top5 = k.competitors[:5]
+        comp_lines = []
+        for cid in top5:
+            name = name_by_id.get(cid, cid)
+            rank = k.competitor_ranks.get(cid)
+            comp_lines.append(f"• {name} (#{rank})" if rank else f"• {name}")
+        rows.append({
             "Source": k.source,
             "Keyword": k.name,
             "Tier": tier,
@@ -113,10 +120,9 @@ def _scored_to_df(items: list[tuple[ScoredKeyword, str]], name_by_id: dict[str, 
             "# Competitors": k.competitor_count,
             "Avg rank": k.avg_competitor_ranking,
             "Bidding apps": k.ad_count if k.ad_count is not None else "",
-            "Competitors": "\n".join(f"• {name_by_id.get(cid, cid)}" for cid in k.competitors),
-        }
-        for k, tier in items
-    ])
+            "Competitors": "\n".join(comp_lines),
+        })
+    return pd.DataFrame(rows)
 
 
 def _competitors_to_df(items: list[Competitor], country: int) -> pd.DataFrame:
