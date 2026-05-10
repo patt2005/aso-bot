@@ -26,7 +26,7 @@ from core.models import Competitor, ScoredKeyword
 DEFAULT_USER_ID = "1789c9b1-73e7-4653-a6b7-01470694e825"
 TOP_COMPETITORS = 15
 SEEDS_FOR_SEARCH = 31
-MAX_KEYWORDS_OUT = 200
+MAX_KEYWORDS_OUT = 50
 
 
 def run_pipeline(

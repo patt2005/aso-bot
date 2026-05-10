@@ -31,7 +31,7 @@ from config import UPUP_AUTH_STATE  # noqa: E402
 
 OUTPUT = ROOT / "cache" / "upup_capture.jsonl"
 START_URL = "https://www.upup.com/"
-LOGIN_EMAIL = "ozunmihai5@gmail.com"  # log in manually with this account
+LOGIN_EMAIL = "mihaiozun5@gmail.com"  # log in manually with this account
 
 
 def main():

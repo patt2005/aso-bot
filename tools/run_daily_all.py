@@ -76,7 +76,7 @@ def process_geo(adam_id: str, user_id: str, country_iso: str) -> None:
     send_document(output_path, caption=caption)
 
 
-UPUP_LOGIN_EMAIL = "ozunmihai5@gmail.com"
+UPUP_LOGIN_EMAIL = "mihaiozun5@gmail.com"
 
 
 def main():
