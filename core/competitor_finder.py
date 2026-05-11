@@ -30,13 +30,16 @@ def find_competitors(
     country: int,
     market: int = DEFAULT_MARKET,
     headless: bool = True,
-) -> list[Competitor]:
+) -> tuple[list[Competitor], dict[str, list[tuple[str, int]]]]:
     """For each seed keyword, query upup search and collect candidate apps.
 
-    Returns Competitors ordered by seed_overlap (descending).
+    Returns:
+        competitors: ordered by seed_overlap (descending)
+        keyword_top_apps: keyword → list of (app_name, rank_position) for top 5
     """
     overlap: dict[str, set[str]] = defaultdict(set)
     metadata: dict[str, dict] = {}
+    keyword_top_apps: dict[str, list[tuple[str, int]]] = {}
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless)
@@ -74,7 +77,8 @@ def find_competitors(
                 app_list = data.get("app_list") or []
                 seed = current_seed["value"]
 
-                for app in app_list:
+                top5 = []
+                for rank_pos, app in enumerate(app_list, 1):
                     upup_id = app.get("id")
                     if not upup_id:
                         continue
@@ -90,6 +94,10 @@ def find_competitors(
                             "ios_app_id": app.get("app_id"),
                             "bundle_id": app.get("bundle_id", ""),
                         }
+                    if rank_pos <= 5:
+                        top5.append((app.get("name", upup_id), rank_pos))
+                if seed and top5:
+                    keyword_top_apps[seed] = top5
             except Exception:
                 pass
 
@@ -139,7 +147,7 @@ def find_competitors(
             matched_seeds=sorted(seeds),
         ))
     competitors.sort(key=lambda c: c.seed_overlap, reverse=True)
-    return competitors
+    return competitors, keyword_top_apps
 
 
 def _trigger_search(page, keyword: str, country: int, market: int) -> None:

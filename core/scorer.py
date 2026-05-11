@@ -19,6 +19,7 @@ from core.keyword_filter import normalize, is_acceptable_language
 def aggregate_keywords(
     competitors: list[Competitor],
     allowed_languages: list[str] | None = None,
+    keyword_top_apps: dict[str, list[tuple[str, int]]] | None = None,
 ) -> list[ScoredKeyword]:
     bucket: dict[str, dict] = defaultdict(lambda: {
         "popularities": [],
@@ -58,6 +59,7 @@ def aggregate_keywords(
         score = pop_avg * math.sqrt(count) / (rank_avg + 1)
         total_apps = max(data["total_apps"]) if data["total_apps"] else None
         ad_count = max(data["ad_counts"]) if data["ad_counts"] else None
+        top_search = (keyword_top_apps or {}).get(name, [])
         scored.append(ScoredKeyword(
             name=name,
             popularity=round(pop_avg, 1),
@@ -68,6 +70,7 @@ def aggregate_keywords(
             score=round(score, 3),
             total_apps=total_apps,
             ad_count=ad_count,
+            top_search_apps=top_search,
         ))
 
     scored.sort(key=lambda s: s.score, reverse=True)

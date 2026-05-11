@@ -46,3 +46,5 @@ class ScoredKeyword:
     bidder_ids: list[str] = field(default_factory=list)
     source: str = "ASO"
     competitor_ranks: dict[str, int] = field(default_factory=dict)
+    # top apps from upup keyword search (name, rank position), populated when available
+    top_search_apps: list[tuple[str, int]] = field(default_factory=list)

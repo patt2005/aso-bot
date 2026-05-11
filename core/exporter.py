@@ -104,12 +104,18 @@ def to_excel(
 def _scored_to_df(items: list[tuple[ScoredKeyword, str]], name_by_id: dict[str, str]) -> pd.DataFrame:
     rows = []
     for k, tier in items:
-        top5 = k.competitors[:5]
         comp_lines = []
-        for cid in top5:
-            name = name_by_id.get(cid, cid)
-            rank = k.competitor_ranks.get(cid)
-            comp_lines.append(f"• {name} (#{rank})" if rank else f"• {name}")
+        if k.top_search_apps:
+            # Use top 5 apps from upup keyword search (actual ranking on this keyword)
+            for app_name, rank_pos in k.top_search_apps[:5]:
+                comp_lines.append(f"• {app_name} (#{rank_pos})")
+        else:
+            # Fallback: top 5 validated competitors ranked on this keyword
+            top5 = k.competitors[:5]
+            for cid in top5:
+                name = name_by_id.get(cid, cid)
+                rank = k.competitor_ranks.get(cid)
+                comp_lines.append(f"• {name} (#{rank})" if rank else f"• {name}")
         rows.append({
             "Source": k.source,
             "Keyword": k.name,

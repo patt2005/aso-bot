@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.py$|\\\\.sh$|main\")",
+      "Bash(ls /Users/petrugrigor/Documents/aso-bot/tools/*.py)"
+    ]
+  }
+}

@@ -51,7 +51,7 @@ def run_pipeline(
     upup_country = to_upup_country(country_iso)
 
     log("Finding competitors...")
-    candidates = find_competitors(all_seeds[:SEEDS_FOR_SEARCH], country=upup_country)
+    candidates, keyword_top_apps = find_competitors(all_seeds[:SEEDS_FOR_SEARCH], country=upup_country)
     log(f"  {len(candidates)} candidates")
 
     log("Validating niche fit (Jaccard >= 30%)...")
@@ -66,7 +66,7 @@ def run_pipeline(
         comp.keywords = get_keywords(comp.app_id, country=upup_country)
 
     log("Aggregating + filtering...")
-    scored = aggregate_keywords(validated, allowed_languages=["EN", country_iso.upper()])
+    scored = aggregate_keywords(validated, allowed_languages=["EN", country_iso.upper()], keyword_top_apps=keyword_top_apps)
     total_before = len(scored)
     scored = exclude_seeds(scored, all_seeds)
     after_seeds = len(scored)

@@ -42,7 +42,7 @@ def run(
     print(f"  → {len(seeds)} seed keywords")
 
     print("Finding competitor apps...")
-    candidates = find_competitors(seeds, country=country)
+    candidates, keyword_top_apps = find_competitors(seeds, country=country)
     print(f"  → {len(candidates)} candidate competitors")
 
     print("Validating niche fit...")
@@ -59,7 +59,7 @@ def run(
         comp.keywords = get_keywords(comp.app_id, country=country)
 
     print("Scoring + classifying...")
-    scored = aggregate_keywords(validated)
+    scored = aggregate_keywords(validated, keyword_top_apps=keyword_top_apps)
     classified = classify(scored)
     print(
         f"  → BEST: {len(classified['BEST'])}, "
