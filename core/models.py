@@ -9,6 +9,7 @@ class Keyword:
     ranking: Optional[int] = None
     change: Optional[int] = None
     popularity: Optional[float] = None
+    search_index: Optional[float] = None
     total_apps: Optional[int] = None
     ad_count: Optional[int] = None
 

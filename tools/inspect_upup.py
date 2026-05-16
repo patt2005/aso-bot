@@ -31,8 +31,9 @@ from config import UPUP_AUTH_STATE  # noqa: E402
 
 OUTPUT = ROOT / "cache" / "upup_capture.jsonl"
 START_URL = "https://www.upup.com/"
-LOGIN_EMAIL = "mihaiozun5@gmail.com"  # log in manually with this account
 
+EMAIL = "petru@codbun.com"
+PASSWORD = "VSuPzNcZw7sTWG!"
 
 def main():
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
@@ -48,7 +49,7 @@ def main():
             ctx_kwargs["storage_state"] = UPUP_AUTH_STATE
             print(f"Using auth state: {UPUP_AUTH_STATE}")
         else:
-            print(f"No auth state — log in manually with: {LOGIN_EMAIL}")
+            print(f"No auth state — log in manually with: {EMAIL}")
         context = browser.new_context(**ctx_kwargs)
         page = context.new_page()
 

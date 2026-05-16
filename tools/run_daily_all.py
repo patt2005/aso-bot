@@ -58,7 +58,7 @@ APPS = [
 def process_geo(adam_id: str, user_id: str, country_iso: str) -> None:
     app_name = get_app_name(adam_id, country=country_iso)
     output_path = default_output_path(adam_id, country_iso)
-    stats = run_pipeline(adam_id, country_iso, output_path, user_id=user_id, record=False)
+    stats = run_pipeline(adam_id, country_iso, output_path, user_id=user_id)
 
     if stats["new_keywords"] == 0:
         print(f"  no new keywords for {adam_id} {country_iso} — skipping send")

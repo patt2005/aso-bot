@@ -58,6 +58,10 @@ def _color_by_thresholds(value, thresholds, reverse=False):
     """
     if value is None:
         return FONT_NEUTRAL
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return FONT_NEUTRAL
     g, y = thresholds
     if not reverse:
         if value >= g:

@@ -32,7 +32,6 @@ def run_pipeline(
     country_iso: str,
     output_path: str | Path,
     user_id: str = DEFAULT_USER_ID,
-    record: bool = True,
     log: Callable[[str], None] = print,
 ) -> dict:
     """Run the full niche-finder pipeline and write an xlsx report.

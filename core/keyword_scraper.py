@@ -9,7 +9,7 @@ from playwright.sync_api import sync_playwright, TimeoutError as PWTimeoutError
 
 from core.models import Keyword
 from core.keyword_cache import get_cached, set_cached
-from config import UPUP_AUTH_STATE, MIN_POPULARITY, DEFAULT_MARKET, KEYWORD_CACHE_TTL_HOURS
+from config import UPUP_AUTH_STATE, DEFAULT_MARKET, KEYWORD_CACHE_TTL_HOURS
 
 DEFAULT_UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6) "
@@ -80,10 +80,11 @@ def _scrape_keywords(app_id: str, country: int, market: int) -> list[Keyword]:
                         ranking=item[1],
                         change=item[2],
                         popularity=item[7],
-                        total_apps=item[3] if len(item) > 3 else None,
-                        ad_count=item[4] if len(item) > 4 else None,
+                        search_index=item[3] if len(item) > 3 else None,
+                        total_apps=item[4] if len(item) > 4 else None,
+                        ad_count=item[5] if len(item) > 5 else None,
                     )
-                    if kw.popularity is not None and kw.popularity >= MIN_POPULARITY:
+                    if (kw.popularity is not None and kw.search_index is not None and kw.search_index >= 4605):
                         keywords.append(kw)
             except Exception:
                 pass
