@@ -25,7 +25,15 @@ from core.pipeline import run_pipeline, default_output_path, DEFAULT_USER_ID
 from core.seed_loader import load_seeds_by_country
 from core.app_lookup import get_app_name
 from core.auth_check import verify_upup_auth
+from core.niche_exporter import export_niches_to_excel
 from bot.telegram_sender import send_document, send_message
+
+sys.path.insert(0, str(ROOT / "tools"))
+from niche_finder import fetch_rank_data, find_niches  # noqa: E402
+
+NICHE_MIN_INCR = 50   # only STRONG / EXPLOSIVE signals
+NICHE_MAX_RANK = 150
+NICHE_TOP_N    = 50
 
 
 def hydrate_auth_state_from_env():
@@ -79,6 +87,70 @@ def process_geo(adam_id: str, user_id: str, country_iso: str) -> None:
 UPUP_LOGIN_EMAIL = "mihaiozun5@gmail.com"
 
 
+def run_niche_finder() -> None:
+    """Fetch Top Free chart, score rising apps, export xlsx, send via Telegram."""
+    print("\n--- Niche Finder ---")
+    try:
+        data = fetch_rank_data(country_id=24)
+    except Exception as exc:
+        print(f"  niche finder: failed to fetch rank data: {exc}")
+        return
+
+    if not data:
+        print("  niche finder: no data returned (session may be invalid)")
+        return
+
+    niches = find_niches(
+        data,
+        min_incr=NICHE_MIN_INCR,
+        max_rank=NICHE_MAX_RANK,
+        top_n=NICHE_TOP_N,
+        include_ads=False,
+    )
+
+    if not niches:
+        print(f"  niche finder: no apps with rank jump >= {NICHE_MIN_INCR} found today")
+        try:
+            send_message(
+                f"📊 Niche Finder — {datetime.date.today().isoformat()}\n"
+                f"No apps with rank jump ≥ {NICHE_MIN_INCR} in Top Free today."
+            )
+        except Exception:
+            pass
+        return
+
+    print(f"  niche finder: {len(niches)} opportunities found")
+
+    output_path = ROOT / "cache" / f"niches_{datetime.date.today().isoformat()}.xlsx"
+    try:
+        export_niches_to_excel(niches, output_path)
+        print(f"  niche finder: saved to {output_path}")
+    except Exception as exc:
+        print(f"  niche finder: excel export failed: {exc}")
+        return
+
+    top3 = niches[:3]
+    top3_lines = "\n".join(
+        f"  {i+1}. {n['name']} (+{n['rank_incr']} spots → #{n['rank']})  [{n['tier']}]"
+        for i, n in enumerate(top3)
+    )
+    caption = (
+        f"📈 App Store Niche Finder\n"
+        f"📅 {datetime.date.today().isoformat()}\n"
+        f"\n"
+        f"🔥 {len(niches)} rising apps (rank jump ≥ {NICHE_MIN_INCR})\n"
+        f"\n"
+        f"Top movers:\n{top3_lines}\n"
+        f"\n"
+        f"Full report in the attached Excel."
+    )
+    try:
+        send_document(str(output_path), caption=caption)
+        print("  niche finder: report sent via Telegram")
+    except Exception as exc:
+        print(f"  niche finder: failed to send Telegram: {exc}")
+
+
 def main():
     print(f"=== {datetime.datetime.now().isoformat()} — daily multi-geo scan ===")
 
@@ -109,40 +181,42 @@ def main():
         sys.exit(1)
     print("  ✓ upup auth is valid")
 
-    for app in APPS:
-        adam_id = app["adam_id"]
-        user_id = app["user_id"]
-        try:
-            grouped = load_seeds_by_country(adam_id, user_id)
-        except Exception as exc:
-            print(f"  failed to load seeds for {adam_id}: {exc}")
-            try:
-                send_message(f"❌ Daily scan failed to load seeds for {adam_id}: {exc}")
-            except Exception:
-                pass
-            continue
+    run_niche_finder()
 
-        from core.country_map import ISO_TO_UPUP
-        active_countries = sorted(grouped.keys())
-        runnable = [c for c in active_countries if c in ISO_TO_UPUP]
-        skipped = [c for c in active_countries if c not in ISO_TO_UPUP]
-
-        print(f"  {adam_id}: active campaigns in {active_countries}")
-        print(f"    runnable: {runnable}")
-        if skipped:
-            print(f"    skipped (no upup id mapped): {skipped}")
-
-        for country_iso in runnable:
-            try:
-                process_geo(adam_id, user_id, country_iso)
-            except Exception as exc:
-                print(f"  failed for {adam_id} {country_iso}: {exc}")
-                try:
-                    send_message(f"❌ Daily scan failed for {adam_id} {country_iso}: {exc}")
-                except Exception:
-                    pass
-
-    print(f"=== {datetime.datetime.now().isoformat()} — done ===")
+    # for app in APPS:
+    #     adam_id = app["adam_id"]
+    #     user_id = app["user_id"]
+    #     try:
+    #         grouped = load_seeds_by_country(adam_id, user_id)
+    #     except Exception as exc:
+    #         print(f"  failed to load seeds for {adam_id}: {exc}")
+    #         try:
+    #             send_message(f"❌ Daily scan failed to load seeds for {adam_id}: {exc}")
+    #         except Exception:
+    #             pass
+    #         continue
+    #
+    #     from core.country_map import ISO_TO_UPUP
+    #     active_countries = sorted(grouped.keys())
+    #     runnable = [c for c in active_countries if c in ISO_TO_UPUP]
+    #     skipped = [c for c in active_countries if c not in ISO_TO_UPUP]
+    #
+    #     print(f"  {adam_id}: active campaigns in {active_countries}")
+    #     print(f"    runnable: {runnable}")
+    #     if skipped:
+    #         print(f"    skipped (no upup id mapped): {skipped}")
+    #
+    #     for country_iso in runnable:
+    #         try:
+    #             process_geo(adam_id, user_id, country_iso)
+    #         except Exception as exc:
+    #             print(f"  failed for {adam_id} {country_iso}: {exc}")
+    #             try:
+    #                 send_message(f"❌ Daily scan failed for {adam_id} {country_iso}: {exc}")
+    #             except Exception:
+    #                 pass
+    #
+    # print(f"=== {datetime.datetime.now().isoformat()} — done ===")
 
 
 if __name__ == "__main__":
