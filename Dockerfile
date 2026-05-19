@@ -1,5 +1,5 @@
 # Base image with Python 3.12 + Playwright + Chromium pre-installed.
-FROM mcr.microsoft.com/playwright/python:v1.59.0-jammy
+FROM mcr.microsoft.com/playwright/python:v1.60.0-jammy
 
 WORKDIR /app
 
