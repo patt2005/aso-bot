@@ -32,8 +32,8 @@ from config import UPUP_AUTH_STATE  # noqa: E402
 OUTPUT = ROOT / "cache" / "upup_capture.jsonl"
 START_URL = "https://www.upup.com/"
 
-EMAIL = "petru@codbun.com"
-PASSWORD = "VSuPzNcZw7sTWG!"
+EMAIL = "easterparsons1994@gmail.com"
+PASSWORD = "d;iPlR6648£2"
 
 def main():
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)

@@ -5,7 +5,8 @@
       "Bash(ls /Users/petrugrigor/Documents/aso-bot/tools/*.py)",
       "Bash(python *)",
       "Bash(echo \"Browser opened, PID: $!\")",
-      "Bash(kill 12269)"
+      "Bash(kill 12269)",
+      "Bash(xxd)"
     ]
   }
 }

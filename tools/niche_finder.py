@@ -33,7 +33,6 @@ DEFAULT_COUNTRY_ID = 24   # US
 DEFAULT_MARKET_ID  = 1    # iOS App Store
 DEVICE_ID          = 1    # iPhone
 BRAND_ID_FREE      = 2    # Top Free
-RANK_TYPE          = 1
 
 # Niche scoring thresholds
 INCR_EXPLOSIVE  = 100
@@ -50,67 +49,112 @@ CROWDED_REVIEWS = 10_000  # rating_count above this = established app
 
 def _make_rank_url(country_id: int, timestamp_ms: int | None = None) -> str:
     ts = timestamp_ms or (int(time.time()) * 1000)
-    # upup URL pattern: /rank/ios/{market_id}-{brand_id}-{genre_id}-{country_id}-{sub}
-    # genre_id 173 = All Categories, brand_id 2 = Top Free
-    return f"https://www.upup.com/rank/ios/1-2-173-{country_id}-0?time={ts}&device={DEVICE_ID}"
+    return f"https://www.upup.com/rank/ios/1-1-173-{country_id}-0?time={ts}&device={DEVICE_ID}"
 
 
-def fetch_rank_data(country_id: int = DEFAULT_COUNTRY_ID) -> dict | None:
-    """Open upup rank page in headless browser, capture the /rank POST response."""
-    auth_state = str(ROOT / UPUP_AUTH_STATE.lstrip("./"))
-    if not os.path.exists(UPUP_AUTH_STATE):
-        # try relative to ROOT
-        auth_state = str(ROOT / "cache" / "auth_state.json")
+def _load_auth_state(auth_state: str) -> dict | None:
+    """Load and validate auth state JSON. Returns None if missing or corrupt."""
+    if not os.path.exists(auth_state):
+        return None
+    try:
+        with open(auth_state) as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def fetch_rank_data(country_id: int = DEFAULT_COUNTRY_ID, pages: int = 4) -> dict | None:
+    """Open upup rank page in headless browser, auto-scroll to trigger all rank pages,
+    then merge their responses.
+
+    The page uses infinite scroll — each scroll fires a new POST /pc/v1/rank for the
+    next 20 entries. We scroll {pages} times to collect pages 1-{pages} (ranks 1-80).
+
+    Returns a merged dict:
+      - apps[]  : all app detail objects from all pages, deduped by id
+      - ranks[] : single entry whose apps[] = all Top Free rank entries in order
+      - _token  : the captured Bearer token
+    """
+    auth_state_path = str(ROOT / UPUP_AUTH_STATE.lstrip("./"))
+    if not os.path.exists(auth_state_path):
+        auth_state_path = str(ROOT / "cache" / "auth_state.json")
 
     url = _make_rank_url(country_id)
-    captured: dict | None = None
+    auth_data = _load_auth_state(auth_state_path)
+
+    page_responses: list[dict] = []
+    captured_token: str | None = None
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         ctx_kwargs: dict = {"locale": "en-US"}
-        if os.path.exists(auth_state):
-            try:
-                import json as _json
-                _json.load(open(auth_state))
-                ctx_kwargs["storage_state"] = auth_state
-                print(f"[auth] Using saved session: {auth_state}")
-            except Exception:
-                print(f"[warn] Auth state at {auth_state} is corrupted — ignoring it")
-                print("       Run: python tools/inspect_upup.py  to refresh the session")
+        if auth_data:
+            ctx_kwargs["storage_state"] = auth_state_path
+            print(f"[auth] Using saved session: {auth_state_path}")
         else:
-            print(f"[warn] No auth state at {auth_state} — request may fail (401)")
+            print(f"[warn] No valid auth state at {auth_state_path} — request may fail")
+            print("       Run: python tools/inspect_upup.py  to refresh the session")
 
         context = browser.new_context(**ctx_kwargs)
-        page = context.new_page()
+        page_obj = context.new_page()
 
-        def on_response(resp):
-            nonlocal captured
-            if captured:
-                return
-            if "api.upup.com/pc/v1/rank" not in resp.url:
-                return
-            if resp.request.method != "POST":
-                return
+        def on_response(r):
             try:
-                body = resp.json()
-                if body.get("code") == 0 and "data" in body:
-                    captured = body["data"]
-                    print(f"[ok] Captured /rank response ({len(body['data'].get('apps', []))} apps)")
-            except Exception as e:
-                print(f"[err] Failed to parse /rank response: {e}")
+                if "api.upup.com/pc/v1/rank" in r.url and r.request.method == "POST":
+                    rb = r.json()
+                    if rb.get("code") == 0 and "data" in rb:
+                        rd = rb["data"]
+                        pg_num   = len(page_responses) + 1
+                        ra_apps  = len(rd.get("apps", []))
+                        ra_ranks = len((rd.get("ranks") or [{}])[0].get("apps", []))
+                        print(f"[ok] Page {pg_num} captured — {ra_apps} app details, {ra_ranks} rank entries")
+                        page_responses.append(rd)
 
-        page.on("response", on_response)
+            except Exception as exc:
+                print(f"[err] Response handler: {exc}")
+
+        page_obj.on("response", on_response)
         print(f"[nav] Opening {url}")
-        page.goto(url, wait_until="networkidle", timeout=30_000)
+        page_obj.goto(url, wait_until="networkidle", timeout=30_000)
 
-        # Wait up to 10s for the response to arrive after page load
-        deadline = time.time() + 10
-        while not captured and time.time() < deadline:
-            time.sleep(0.3)
+        for pg in range(1, pages + 1):
+            before = len(page_responses)
+            page_obj.keyboard.press("End")
+            print(f"[scroll] End key press #{pg}")
+            deadline = time.time() + 8
+            while len(page_responses) <= before and time.time() < deadline:
+                time.sleep(0.3)
+            if len(page_responses) <= before:
+                print(f"[warn] Page {pg + 1} did not arrive — stopping")
+                break
 
         browser.close()
 
-    return captured
+    if not page_responses:
+        return None
+
+    # Merge all pages into a single structure
+    all_apps: dict[str, dict] = {}
+    free_rank_entries: list[dict] = []
+    free_brand_meta: dict = {}
+
+    for i, data in enumerate(page_responses):
+        for app in data.get("apps", []):
+            all_apps[app["id"]] = app
+        ranks = data.get("ranks") or []
+        if ranks:
+            if not free_brand_meta:
+                free_brand_meta = {k: v for k, v in ranks[0].items() if k != "apps"}
+            free_rank_entries.extend(ranks[0].get("apps", []))
+
+    print(f"[summary] {len(free_rank_entries)} Top Free rank entries, "
+          f"{len(all_apps)} app detail records across {len(page_responses)} pages")
+
+    return {
+        "apps":   list(all_apps.values()),
+        "ranks":  [{**free_brand_meta, "apps": free_rank_entries}],
+        "_token": captured_token,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -183,29 +227,36 @@ def find_niches(
     data: dict,
     min_incr: int = INCR_RISING,
     max_rank: int = MAX_RANK,
+    max_age_days: int = 120,
     top_n: int = 20,
     include_ads: bool = False,
 ) -> list[dict]:
-    """Filter and score rising apps, return top niche opportunities."""
+    """Filter and score rising apps, return top niche opportunities.
+
+    Uses ranks[0] (Top Free, brand_id=2) — which is pre-merged across all
+    paginated pages by fetch_rank_data(). App details come from apps[] which
+    is also pre-merged across pages, so no separate batch API call is needed.
+    """
     apps_by_id = {a["id"]: a for a in data.get("apps", [])}
     now_ts = int(time.time())
 
-    # Use brand_id=2 (Top Free) ranks — first entry in ranks list
-    free_ranks = next(
-        (r for r in data.get("ranks", []) if r.get("brand_id") == BRAND_ID_FREE),
-        None,
-    )
-    if not free_ranks:
-        print("[err] Could not find Top Free ranks in response")
+    # ranks[0] is always Top Free (brand_id=2)
+    ranks_list = data.get("ranks") or []
+    if not ranks_list:
+        print("[err] No ranks in response")
         return []
+    free_ranks = ranks_list[0]
+    all_entries = free_ranks.get("apps", [])
+    print(f"[info] Using ranks[0]: brand_id={free_ranks.get('brand_id')}, "
+          f"{len(all_entries)} total rank entries, {len(apps_by_id)} app detail records")
 
     results = []
-    for entry in free_ranks.get("apps", []):
-        incr = entry.get("category_ranking_incr", 0)
-        rank = entry.get("category_ranking", 999)
+    missing = 0
+    for entry in all_entries:
+        incr  = entry.get("category_ranking_incr", 0)
+        rank  = entry.get("category_ranking", 999)
         is_ad = entry.get("is_ad", 0)
 
-        # Filters
         if incr < min_incr:
             continue
         if rank > max_rank:
@@ -213,10 +264,20 @@ def find_niches(
         if not include_ads and is_ad:
             continue
 
-        app_id = entry.get("id")
-        app_info = apps_by_id.get(app_id, {})
+        upup_id  = entry.get("id")
+        app_info = apps_by_id.get(upup_id, {})
+        if not app_info:
+            missing += 1
+
         scored = score_app(entry, app_info, now_ts)
+
+        if max_age_days and scored["app_age_days"] > max_age_days:
+            continue
+
         results.append(scored)
+
+    if missing:
+        print(f"[warn] {missing} rank entries had no matching app detail record")
 
     results.sort(key=lambda x: x["niche_score"], reverse=True)
     return results[:top_n]
@@ -279,6 +340,7 @@ def main() -> None:
     parser.add_argument("--country", type=int, default=DEFAULT_COUNTRY_ID, help="Country ID (default: 24=US)")
     parser.add_argument("--min-incr", type=int, default=INCR_RISING, help=f"Minimum rank jump to consider (default: {INCR_RISING})")
     parser.add_argument("--max-rank", type=int, default=MAX_RANK, help=f"Maximum chart position to include (default: {MAX_RANK})")
+    parser.add_argument("--max-age", type=int, default=120, help="Maximum app age in days to include (default: 120)")
     parser.add_argument("--top", type=int, default=20, help="How many results to show (default: 20)")
     parser.add_argument("--include-ads", action="store_true", help="Include Apple-promoted apps")
     parser.add_argument("--save", metavar="FILE", help="Save raw rank JSON to file")
@@ -300,6 +362,7 @@ def main() -> None:
         data,
         min_incr=args.min_incr,
         max_rank=args.max_rank,
+        max_age_days=args.max_age,
         top_n=args.top,
         include_ads=args.include_ads,
     )
