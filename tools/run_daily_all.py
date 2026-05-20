@@ -183,38 +183,38 @@ def main():
 
     run_niche_finder()
 
-    for app in APPS:
-        adam_id = app["adam_id"]
-        user_id = app["user_id"]
-        try:
-            grouped = load_seeds_by_country(adam_id, user_id)
-        except Exception as exc:
-            print(f"  failed to load seeds for {adam_id}: {exc}")
-            try:
-                send_message(f"❌ Daily scan failed to load seeds for {adam_id}: {exc}")
-            except Exception:
-                pass
-            continue
-
-        from core.country_map import ISO_TO_UPUP
-        active_countries = sorted(grouped.keys())
-        runnable = [c for c in active_countries if c in ISO_TO_UPUP]
-        skipped = [c for c in active_countries if c not in ISO_TO_UPUP]
-
-        print(f"  {adam_id}: active campaigns in {active_countries}")
-        print(f"    runnable: {runnable}")
-        if skipped:
-            print(f"    skipped (no upup id mapped): {skipped}")
-
-        for country_iso in runnable:
-            try:
-                process_geo(adam_id, user_id, country_iso)
-            except Exception as exc:
-                print(f"  failed for {adam_id} {country_iso}: {exc}")
-                try:
-                    send_message(f"❌ Daily scan failed for {adam_id} {country_iso}: {exc}")
-                except Exception:
-                    pass
+    # for app in APPS:
+    #     adam_id = app["adam_id"]
+    #     user_id = app["user_id"]
+    #     try:
+    #         grouped = load_seeds_by_country(adam_id, user_id)
+    #     except Exception as exc:
+    #         print(f"  failed to load seeds for {adam_id}: {exc}")
+    #         try:
+    #             send_message(f"❌ Daily scan failed to load seeds for {adam_id}: {exc}")
+    #         except Exception:
+    #             pass
+    #         continue
+    #
+    #     from core.country_map import ISO_TO_UPUP
+    #     active_countries = sorted(grouped.keys())
+    #     runnable = [c for c in active_countries if c in ISO_TO_UPUP]
+    #     skipped = [c for c in active_countries if c not in ISO_TO_UPUP]
+    #
+    #     print(f"  {adam_id}: active campaigns in {active_countries}")
+    #     print(f"    runnable: {runnable}")
+    #     if skipped:
+    #         print(f"    skipped (no upup id mapped): {skipped}")
+    #
+    #     for country_iso in runnable:
+    #         try:
+    #             process_geo(adam_id, user_id, country_iso)
+    #         except Exception as exc:
+    #             print(f"  failed for {adam_id} {country_iso}: {exc}")
+    #             try:
+    #                 send_message(f"❌ Daily scan failed for {adam_id} {country_iso}: {exc}")
+    #             except Exception:
+    #                 pass
 
     print(f"=== {datetime.datetime.now().isoformat()} — done ===")
 

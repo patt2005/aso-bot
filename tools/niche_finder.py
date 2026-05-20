@@ -83,7 +83,6 @@ def fetch_rank_data(country_id: int = DEFAULT_COUNTRY_ID, pages: int = 4) -> dic
     auth_data = _load_auth_state(auth_state_path)
 
     page_responses: list[dict] = []
-    captured_token: str | None = None
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -118,42 +117,38 @@ def fetch_rank_data(country_id: int = DEFAULT_COUNTRY_ID, pages: int = 4) -> dic
         page_obj.goto(url, wait_until="networkidle", timeout=30_000)
 
         for pg in range(1, pages + 1):
-            before = len(page_responses)
             page_obj.keyboard.press("End")
             print(f"[scroll] End key press #{pg}")
-            deadline = time.time() + 8
-            while len(page_responses) <= before and time.time() < deadline:
-                time.sleep(0.3)
-            if len(page_responses) <= before:
-                print(f"[warn] Page {pg + 1} did not arrive — stopping")
-                break
+            time.sleep(1)
 
         browser.close()
 
     if not page_responses:
         return None
 
-    # Merge all pages into a single structure
-    all_apps: dict[str, dict] = {}
     free_rank_entries: list[dict] = []
-    free_brand_meta: dict = {}
+    apps_dict = {}
 
-    for i, data in enumerate(page_responses):
+    for data in page_responses:
+        top_free_ranks = data["ranks"][0].get("apps", [])
+
         for app in data.get("apps", []):
-            all_apps[app["id"]] = app
-        ranks = data.get("ranks") or []
-        if ranks:
-            if not free_brand_meta:
-                free_brand_meta = {k: v for k, v in ranks[0].items() if k != "apps"}
-            free_rank_entries.extend(ranks[0].get("apps", []))
+            apps_dict[app["id"]] = app
 
-    print(f"[summary] {len(free_rank_entries)} Top Free rank entries, "
-          f"{len(all_apps)} app detail records across {len(page_responses)} pages")
+        for rank in top_free_ranks:
+            app_id = rank.get("id")
+            app = apps_dict[app_id]
+            if app is not None:
+                app["total_ranking"] = rank.get("total_ranking", 0)
+                app["total_ranking_incr"] = rank.get("total_ranking_incr", 0)
+                app["is_ad"] = rank.get("is_ad", 0)
+                app["category_id"] = rank.get("category_id", 0)
+                free_rank_entries.append(app)
+
+    print(f"Found {len(free_rank_entries)} apps")
 
     return {
-        "apps":   list(all_apps.values()),
-        "ranks":  [{**free_brand_meta, "apps": free_rank_entries}],
-        "_token": captured_token,
+        "apps": free_rank_entries,
     }
 
 
@@ -161,18 +156,17 @@ def fetch_rank_data(country_id: int = DEFAULT_COUNTRY_ID, pages: int = 4) -> dic
 # Scoring logic
 # ---------------------------------------------------------------------------
 
-def score_app(rank_entry: dict, app_info: dict, now_ts: int) -> dict:
+def score_app(app: dict, now_ts: int) -> dict:
     """Combine rank movement + app quality into a niche score."""
-    incr  = rank_entry.get("category_ranking_incr", 0)
-    rank  = rank_entry.get("category_ranking", 999)
-    is_ad = rank_entry.get("is_ad", 0)
-    rtype = rank_entry.get("type", 0)   # 0=stable, 1=up, 2=down
+    incr  = app.get("total_ranking_incr", 0)
+    rank  = app.get("total_ranking", 999)
+    is_ad = app.get("is_ad", 0)
 
-    rating       = app_info.get("rating", 0)
-    rating_count = app_info.get("rating_count", 0)
-    release_ts   = app_info.get("release_time", 0)
-    is_featured  = app_info.get("is_top_in_apps", 0)
-    price        = app_info.get("price", 0)
+    rating       = app.get("rating", 0)
+    rating_count = app.get("rating_count", 0)
+    release_ts   = app.get("release_time", 0)
+    is_featured  = app.get("is_top_in_apps", 0)
+    price        = app.get("price", 0)
 
     app_age_days = (now_ts - release_ts) / 86400 if release_ts else 9999
 
@@ -204,13 +198,12 @@ def score_app(rank_entry: dict, app_info: dict, now_ts: int) -> dict:
         tier = "weak"
 
     return {
-        "app_id":        app_info.get("app_id"),
-        "name":          app_info.get("name", "Unknown"),
-        "developer":     app_info.get("developer", {}).get("name", ""),
-        "genre":         app_info.get("genres", [{}])[0].get("name", ""),
+        "app_id":        app.get("app_id"),
+        "name":          app.get("name", "Unknown"),
+        "developer":     app.get("developer", {}).get("name", ""),
+        "genre":         app.get("genres", [{}])[0].get("name", ""),
         "rank":          rank,
         "rank_incr":     incr,
-        "type":          {0: "stable", 1: "rising", 2: "falling"}.get(rtype, "?"),
         "is_ad":         bool(is_ad),
         "is_featured":   bool(is_featured),
         "rating":        rating,
@@ -233,29 +226,20 @@ def find_niches(
 ) -> list[dict]:
     """Filter and score rising apps, return top niche opportunities.
 
-    Uses ranks[0] (Top Free, brand_id=2) — which is pre-merged across all
-    paginated pages by fetch_rank_data(). App details come from apps[] which
-    is also pre-merged across pages, so no separate batch API call is needed.
+    Expects data["apps"] to be a flat list of app objects, each already
+    containing total_ranking, total_ranking_incr, and is_ad fields as
+    produced by fetch_rank_data().
     """
-    apps_by_id = {a["id"]: a for a in data.get("apps", [])}
+    all_apps = data.get("apps", [])
     now_ts = int(time.time())
 
-    # ranks[0] is always Top Free (brand_id=2)
-    ranks_list = data.get("ranks") or []
-    if not ranks_list:
-        print("[err] No ranks in response")
-        return []
-    free_ranks = ranks_list[0]
-    all_entries = free_ranks.get("apps", [])
-    print(f"[info] Using ranks[0]: brand_id={free_ranks.get('brand_id')}, "
-          f"{len(all_entries)} total rank entries, {len(apps_by_id)} app detail records")
+    print(f"[info] Scoring {len(all_apps)} apps from flat apps[] list")
 
     results = []
-    missing = 0
-    for entry in all_entries:
-        incr  = entry.get("category_ranking_incr", 0)
-        rank  = entry.get("category_ranking", 999)
-        is_ad = entry.get("is_ad", 0)
+    for app in all_apps:
+        incr  = app.get("total_ranking_incr", 0)
+        rank  = app.get("total_ranking", 999)
+        is_ad = app.get("is_ad", 0)
 
         if incr < min_incr:
             continue
@@ -264,20 +248,12 @@ def find_niches(
         if not include_ads and is_ad:
             continue
 
-        upup_id  = entry.get("id")
-        app_info = apps_by_id.get(upup_id, {})
-        if not app_info:
-            missing += 1
-
-        scored = score_app(entry, app_info, now_ts)
+        scored = score_app(app, now_ts)
 
         if max_age_days and scored["app_age_days"] > max_age_days:
             continue
 
         results.append(scored)
-
-    if missing:
-        print(f"[warn] {missing} rank entries had no matching app detail record")
 
     results.sort(key=lambda x: x["niche_score"], reverse=True)
     return results[:top_n]
