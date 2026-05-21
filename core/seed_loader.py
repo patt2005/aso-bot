@@ -12,6 +12,7 @@ Response item shape:
     "bidAmount": {"amount": "1", "currency": "USD"},
     "status": "ACTIVE", "deleted": false,
     "countryCode": "RO",                   # per-keyword country
+    "totalRevenue": 12.50,                 # revenue attributed to this keyword
     ...
   }
 
@@ -25,12 +26,12 @@ import httpx
 from config import SEED_KEYWORDS_ENDPOINT
 
 
-def _fetch_raw(adam_id: str | int, user_id: str) -> list[dict]:
+def _fetch_raw(adam_id: str | int, user_id: str, country: str) -> list[dict]:
     if not SEED_KEYWORDS_ENDPOINT:
         raise RuntimeError("SEED_KEYWORDS_ENDPOINT not configured in .env")
     resp = httpx.get(
         SEED_KEYWORDS_ENDPOINT,
-        params={"adamId": str(adam_id), "userId": user_id},
+        params={"adamId": str(adam_id), "userId": user_id, "country": country},
         timeout=120.0,
     )
     resp.raise_for_status()
@@ -40,10 +41,10 @@ def _fetch_raw(adam_id: str | int, user_id: str) -> list[dict]:
     return payload
 
 
-def load_seeds_by_country(adam_id: str | int, user_id: str) -> dict[str, list[str]]:
-    """Return {country_code: [keyword, ...]} of active, non-deleted keywords."""
-    raw = _fetch_raw(adam_id, user_id)
-    grouped: dict[str, set[str]] = defaultdict(set)
+def load_seeds_by_country(adam_id: str | int, user_id: str, country: str) -> list[str]:
+    """Return sorted list of active, non-deleted keywords for a single country."""
+    raw = _fetch_raw(adam_id, user_id, country)
+    words: set[str] = set()
     for item in raw:
         if item.get("deleted"):
             continue
@@ -52,17 +53,43 @@ def load_seeds_by_country(adam_id: str | int, user_id: str) -> dict[str, list[st
         text = (item.get("text") or "").strip().lower()
         if not text:
             continue
-        country = (item.get("countryCode") or "US").upper()
-        grouped[country].add(text)
-    return {country: sorted(words) for country, words in grouped.items()}
+        words.add(text)
+    return sorted(words)
 
 
-def load_seeds(adam_id: str | int, user_id: str, country_code: str | None = None) -> list[str]:
-    """Convenience: return seeds for one country (or all merged if country_code is None)."""
-    grouped = load_seeds_by_country(adam_id, user_id)
-    if country_code:
-        return grouped.get(country_code.upper(), [])
-    merged: set[str] = set()
-    for words in grouped.values():
-        merged.update(words)
-    return sorted(merged)
+def load_seeds_with_revenue(
+    adam_id: str | int,
+    user_id: str,
+    country_code: str,
+) -> list[dict]:
+    """Return active seeds with revenue data for a single country.
+
+    Each item: { text: str, revenue: float }
+    Multiple entries for the same keyword (e.g. different match types) are
+    merged — revenue is summed, so you get the total attributed to that keyword.
+    Sorted by revenue descending.
+    """
+    raw = _fetch_raw(adam_id, user_id, country_code)
+    merged: dict[str, float] = defaultdict(float)
+
+    for item in raw:
+        if item.get("deleted"):
+            continue
+        if item.get("status") != "ACTIVE":
+            continue
+        text = (item.get("text") or "").strip().lower()
+        if not text:
+            continue
+        revenue = float(item.get("totalRevenue") or 0)
+        merged[text] += revenue
+
+    return sorted(
+        [{"text": kw, "revenue": rev} for kw, rev in merged.items()],
+        key=lambda x: x["revenue"],
+        reverse=True,
+    )
+
+
+def load_seeds(adam_id: str | int, user_id: str, country_code: str) -> list[str]:
+    """Convenience wrapper: return seeds for a single country."""
+    return load_seeds_by_country(adam_id, user_id, country_code)

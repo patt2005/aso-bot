@@ -10,6 +10,7 @@ Three layers, each catches a different kind of false positive:
 """
 from __future__ import annotations
 from openai import OpenAI
+from openai.types.chat import ChatCompletionMessageParam, ChatCompletionUserMessageParam
 
 from core.models import Competitor
 from config import OPENAI_API_KEY, JACCARD_THRESHOLD
@@ -44,10 +45,13 @@ def gpt_is_same_niche(seed_app_description: str, competitor_name: str, competito
         f"Competitor: {competitor_name}\n{competitor_description}\n\n"
         "Reply with one word: SAME, RELATED, or DIFFERENT."
     )
+    messages: list[ChatCompletionMessageParam] = [
+        ChatCompletionUserMessageParam(role="user", content=prompt)
+    ]
     try:
         resp = _openai().chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
+            model="gpt-5.4-mini",
+            messages=messages,
             max_tokens=5,
             temperature=0,
         )

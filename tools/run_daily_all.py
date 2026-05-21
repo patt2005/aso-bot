@@ -20,9 +20,8 @@ sys.path.insert(0, str(ROOT))
 import base64
 import os
 
-from config import UPUP_AUTH_STATE
+from config import UPUP_AUTH_STATE, APPS as APP_CONFIGS
 from core.pipeline import run_pipeline, default_output_path, DEFAULT_USER_ID
-from core.seed_loader import load_seeds_by_country
 from core.app_lookup import get_app_name
 from core.auth_check import verify_upup_auth
 from core.niche_exporter import export_niches_to_excel
@@ -58,9 +57,6 @@ def hydrate_auth_state_from_env():
     print(f"  wrote auth state from env var -> {target}")
 
 
-APPS = [
-    {"adam_id": "6746982805", "user_id": DEFAULT_USER_ID},
-]
 
 
 def process_geo(adam_id: str, user_id: str, country_iso: str) -> None:
@@ -183,38 +179,30 @@ def main():
 
     run_niche_finder()
 
-    # for app in APPS:
-    #     adam_id = app["adam_id"]
-    #     user_id = app["user_id"]
-    #     try:
-    #         grouped = load_seeds_by_country(adam_id, user_id)
-    #     except Exception as exc:
-    #         print(f"  failed to load seeds for {adam_id}: {exc}")
-    #         try:
-    #             send_message(f"❌ Daily scan failed to load seeds for {adam_id}: {exc}")
-    #         except Exception:
-    #             pass
-    #         continue
-    #
-    #     from core.country_map import ISO_TO_UPUP
-    #     active_countries = sorted(grouped.keys())
-    #     runnable = [c for c in active_countries if c in ISO_TO_UPUP]
-    #     skipped = [c for c in active_countries if c not in ISO_TO_UPUP]
-    #
-    #     print(f"  {adam_id}: active campaigns in {active_countries}")
-    #     print(f"    runnable: {runnable}")
-    #     if skipped:
-    #         print(f"    skipped (no upup id mapped): {skipped}")
-    #
-    #     for country_iso in runnable:
-    #         try:
-    #             process_geo(adam_id, user_id, country_iso)
-    #         except Exception as exc:
-    #             print(f"  failed for {adam_id} {country_iso}: {exc}")
-    #             try:
-    #                 send_message(f"❌ Daily scan failed for {adam_id} {country_iso}: {exc}")
-    #             except Exception:
-    #                 pass
+    from core.country_map import ISO_TO_UPUP
+
+    for app in APP_CONFIGS:
+        adam_id = app["adam_id"]
+        user_id = app.get("user_id", DEFAULT_USER_ID)
+        countries = app["countries"]
+
+        runnable = [c for c in countries if c in ISO_TO_UPUP]
+        skipped = [c for c in countries if c not in ISO_TO_UPUP]
+
+        print(f"  {adam_id}: configured countries {countries}")
+        print(f"    runnable: {runnable}")
+        if skipped:
+            print(f"    skipped (no upup id mapped): {skipped}")
+
+        for country_iso in runnable:
+            try:
+                process_geo(adam_id, user_id, country_iso)
+            except Exception as exc:
+                print(f"  failed for {adam_id} {country_iso}: {exc}")
+                try:
+                    send_message(f"❌ Daily scan failed for {adam_id} {country_iso}: {exc}")
+                except Exception:
+                    pass
 
     print(f"=== {datetime.datetime.now().isoformat()} — done ===")
 

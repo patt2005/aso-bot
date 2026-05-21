@@ -24,7 +24,7 @@ from core.models import Competitor, ScoredKeyword
 DEFAULT_USER_ID = "1789c9b1-73e7-4653-a6b7-01470694e825"
 TOP_COMPETITORS = 15
 SEEDS_FOR_SEARCH = 31
-MAX_KEYWORDS_OUT = 50
+MAX_KEYWORDS_OUT = 100
 
 
 def run_pipeline(
@@ -41,8 +41,7 @@ def run_pipeline(
     build captions/messages.
     """
     log("Loading seeds...")
-    grouped = load_seeds_by_country(adam_id, user_id)
-    all_seeds = grouped.get(country_iso.upper(), [])
+    all_seeds = load_seeds_by_country(adam_id, user_id, country_iso.upper())
     if not all_seeds:
         raise RuntimeError(f"No seeds found for country {country_iso}")
     log(f"  {len(all_seeds)} seeds total for {country_iso}")

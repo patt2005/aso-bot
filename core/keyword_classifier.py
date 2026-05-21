@@ -225,7 +225,7 @@ def _call_gpt(
 def classify_batch(
     keywords: list[str],
     app_context: str,
-    model: str = "gpt-4o-mini",
+    model: str = "gpt-5.4-mini",
 ) -> list[ClassifiedKeyword]:
     if not keywords:
         return []
@@ -280,6 +280,6 @@ def classify_batch(
 def classify_single(
     keyword: str,
     app_context: str,
-    model: str = "gpt-4o-mini",
+    model: str = "gpt-5.4-mini",
 ) -> ClassifiedKeyword:
     return classify_batch([keyword], app_context, model)[0]
